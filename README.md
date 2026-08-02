@@ -1,8 +1,8 @@
-# AI-Powered Chatbot for Malicious Activity Detection
+# AI powered chatbot for real time detection of malicious URLs PDF and executable files in live chat environments
 
 ## Overview
 
-This repository contains the implementation of the research project **"An AI-Powered Chatbot for Malicious Activity Detection."**
+This repository contains the implementation of the research project **"AI powered chatbot for real time detection of malicious URLs PDF and executable files in live chat environments"**
 
 The proposed framework integrates multiple machine learning models into a secure Flask-based chatbot capable of detecting malicious URLs, PDF documents, and Windows executable (EXE) files in real time. The chatbot automatically identifies the uploaded content type, routes it to the appropriate detection model, analyses the input, and generates real-time security alerts through a dedicated Agent Dashboard.
 
