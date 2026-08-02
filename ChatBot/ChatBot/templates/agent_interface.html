@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h2>Agent Dashboard</h2>
+        </div>
+        <div id="notifications">
+            <h3>Notifications</h3>
+            <ul id="notification-list"></ul>
+        </div>
+        <div id="notification-list"></div>
+
+        <div id="chat-section" style="display: none;">
+            <div class="chat-messages" id="chat-messages"></div>
+            <textarea id="message-input" placeholder="Type a message..."></textarea>
+            <div class="chat-controls">
+                <button onclick="sendMessage()">Send</button>
+                <label for="file-upload">Upload File</label>
+                <input type="file" id="file-upload" style="display: none;" onchange="uploadFile()">
+                <button onclick="leaveChat()">Leave Chat</button>
+                
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentRoom = 'chatroom'; // The chatroom the agent is currently in
+
+        // Listen for user notifications
+        socket.on('agent_notification', (data) => {
+            const notificationList = document.getElementById('notification-list');
+            const notificationItem = document.createElement('li');
+            notificationItem.innerHTML = `User <strong>${data.username}</strong> is requesting an agent.
+                <button onclick="joinChat('${data.room}')">Join Chat</button>`;
+            notificationList.appendChild(notificationItem);
+        });
+
+
+        socket.on('file_analysis_result', (data) => {
+    console.log("File analysis result received:", data); // Debugging
+
+    const notificationList = document.getElementById('notification-list');
+    const notificationItem = document.createElement('li');
+    notificationItem.innerHTML = `
+        <strong>File Analysis:</strong> 
+        File <strong>${data.filename}</strong> has been analyzed.
+        <br><strong>Status:</strong> ${data.status === "Malicious" ? "<span style='color:red;'>Malicious</span>" : "<span style='color:green;'>Benign</span>"}
+        <br><strong>Probabilities:</strong> 
+        Malicious: ${data.probabilities.Malicious || 'N/A'}%, 
+        Benign: ${data.probabilities.Benign || 'N/A'}%.
+    `;
+
+    // Show alert for malicious files
+    if (data.status === "Malicious") {
+        alert(`⚠️ WARNING: The file "${data.filename}" is MALICIOUS!`);
+        notificationItem.style.backgroundColor = "#ffcccc";
+        notificationItem.style.color = "#cc0000";
+        notificationItem.style.padding = "10px";
+        notificationItem.style.borderRadius = "5px";
+    }
+
+    notificationList.appendChild(notificationItem);
+});
+
+// Handle malicious file alerts
+socket.on('alert', (data) => {
+    const chatMessages = document.getElementById('chat-messages');
+    const alertMessage = `<p style="color: red;"><strong>ALERT:</strong> ${data.message}</p>`;
+    chatMessages.innerHTML += alertMessage;
+    console.log('Alert received:', data.message); // Debugging
+});
+
+        // Join the chatroom
+        function joinChat(room) {
+            currentRoom = room;
+            socket.emit('join_agent', { room });
+            document.getElementById('notifications').style.display = 'none';
+            document.getElementById('chat-section').style.display = 'block';
+        }
+
+        // Handle incoming messages
+        socket.on('message', (data) => {
+            const chatMessages = document.getElementById('chat-messages');
+            chatMessages.innerHTML += `<p><strong>${data.sender}:</strong> ${data.text}</p>`;
+        });
+
+        // Handle file uploads in the chat
+        socket.on('file_upload', (data) => {
+            const chatMessages = document.getElementById('chat-messages');
+            chatMessages.innerHTML += `<p><strong>${data.sender}:</strong> <a href="${data.file_url}" target="_blank">${data.filename}</a></p>`;
+        });
+
+        // Send a message in the chat
+        function sendMessage() {
+            const text = document.getElementById('message-input').value;
+            if (text.trim() !== '') {
+                socket.emit('send_message', { room: currentRoom, sender: 'Agent', text });
+                document.getElementById('message-input').value = '';
+            }
+        }
+
+        // Leave the chatroom
+        function leaveChat() {
+            socket.emit('leave_room', { room: currentRoom, username: 'Agent' });
+            alert('You have left the chat.');
+            location.reload(); // Refresh the agent's dashboard
+        }
+
+        // Upload a file to the chat
+        function uploadFile() {
+            const fileInput = document.getElementById('file-upload');
+            const file = fileInput.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/upload', { method: 'POST', body: formData })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.status === 'success') {
+                            socket.emit('upload_file', {
+                                room: currentRoom,
+                                sender: 'Agent',
+                                filename: data.filename,
+                            });
+                        }
+                    });
+            }
+        }
+    </script>
+</body>
+</html>
