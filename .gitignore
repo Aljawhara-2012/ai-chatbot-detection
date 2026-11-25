@@ -1,0 +1,7 @@
+venv*/
+__pycache__/
+uploads/
+catboost_info/
+*_results/
+linkcheck*/
+url_compare/

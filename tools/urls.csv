@@ -1,0 +1,6 @@
+url,label
+https://www.wikipedia.org,Benign
+https://www.python.org,Benign
+https://www.bbc.com,Benign
+https://www.apu.edu.my,Benign
+http://www.raci.it/component/user/reset.html,Malicious

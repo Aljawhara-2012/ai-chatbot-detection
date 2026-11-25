@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h2>Agent Dashboard</h2>
+        </div>
+        <div id="notifications">
+            <h3>Notifications</h3>
+            <ul id="notification-list"></ul>
+        </div>
+        <div id="notification-list"></div>
+
+        <div id="chat-section" style="display: none;">
+            <div class="chat-messages" id="chat-messages"></div>
+            <textarea id="message-input" placeholder="Type a message..."></textarea>
+            <div class="chat-controls">
+                <button onclick="sendMessage()">Send</button>
+                <label for="file-upload">Upload File</label>
+                <input type="file" id="file-upload" style="display: none;" onchange="uploadFile()">
+                <button onclick="leaveChat()">Leave Chat</button>
+                
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        // Escape text before inserting it into the page (prevents script injection via messages or file names)
+        function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+        socket.on('connect', () => socket.emit('agent_connect', {}));  // join the agent-only room
+        let currentRoom = 'chatroom'; // The chatroom the agent is currently in
+
+        // Listen for user notifications
+        socket.on('agent_notification', (data) => {
+            const notificationList = document.getElementById('notification-list');
+            const notificationItem = document.createElement('li');
+            notificationItem.innerHTML = `User <strong>${esc(data.username)}</strong> is requesting an agent.
+                <button onclick="joinChat('${esc(data.room)}')">Join Chat</button>`;
+            notificationList.appendChild(notificationItem);
+        });
+
+
+        function note(html, flagged) {
+            const li = document.createElement('li');
+            li.innerHTML = html;
+            if (flagged) { li.style.backgroundColor = '#ffcccc'; li.style.color = '#cc0000'; li.style.padding = '10px'; li.style.borderRadius = '5px'; }
+            document.getElementById('notification-list').appendChild(li);
+        }
+
+        // File verdicts (agent only)
+        socket.on('file_analysis_result', (d) => {
+            const link = d.download_url ? `<a href="${esc(d.download_url)}" target="_blank">download</a>` : '<em>withheld (quarantined)</em>';
+            note(`<strong>File:</strong> ${esc(d.filename)} | declared .${esc(d.declared_extension.toLowerCase())}, detected ${esc(d.detected_type)}
+                  | ${esc(d.detector)} | <strong>${esc(d.content_verdict)}</strong>
+                  ${d.flagged ? '<br><strong>Reason:</strong> ' + esc(d.alert_reasons.join('; ')) : ''} | ${link}`, d.flagged);
+        });
+
+        // URL verdicts (agent only)
+        socket.on('url_analysis_result', (d) => {
+            note(`<strong>URL:</strong> ${esc(d.url)} | <strong>${esc(d.status)}</strong>`, d.flagged);
+        });
+
+        // Alerts (agent only)
+        socket.on('alert', (d) => {
+            const chatMessages = document.getElementById('chat-messages');
+            chatMessages.innerHTML += `<p style="color: red;"><strong>ALERT:</strong> ${esc(d.message)}</p>`;
+            note(`<strong>ALERT:</strong> ${esc(d.message)}`, true);
+        });
+
+        // Join the chatroom
+        function joinChat(room) {
+            currentRoom = room;
+            socket.emit('join_agent', { room });
+            document.getElementById('notifications').style.display = 'none';
+            document.getElementById('chat-section').style.display = 'block';
+        }
+
+        // Handle incoming messages
+        socket.on('message', (data) => {
+            const chatMessages = document.getElementById('chat-messages');
+            chatMessages.innerHTML += `<p><strong>${esc(data.sender)}:</strong> ${esc(data.text)}</p>`;
+        });
+
+        // Handle file uploads in the chat
+        socket.on('file_upload', (data) => {
+            const chatMessages = document.getElementById('chat-messages');
+            chatMessages.innerHTML += `<p><strong>${esc(data.sender)}:</strong> ${esc(data.filename)}</p>`;
+        });
+
+        // Send a message in the chat
+        function sendMessage() {
+            const text = document.getElementById('message-input').value;
+            if (text.trim() !== '') {
+                socket.emit('send_message', { room: currentRoom, sender: 'Agent', text });
+                document.getElementById('message-input').value = '';
+            }
+        }
+
+        // Leave the chatroom
+        function leaveChat() {
+            socket.emit('leave_room', { room: currentRoom, username: 'Agent' });
+            alert('You have left the chat.');
+            location.reload(); // Refresh the agent's dashboard
+        }
+
+        // Upload a file to the chat
+        function uploadFile() {
+            const fileInput = document.getElementById('file-upload');
+            const file = fileInput.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/upload', { method: 'POST', body: formData })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.status === 'success') {
+                            socket.emit('upload_file', {
+                                room: currentRoom,
+                                sender: 'Agent',
+                                filename: data.filename,
+                            });
+                        }
+                    });
+            }
+        }
+    </script>
+</body>
+</html>
